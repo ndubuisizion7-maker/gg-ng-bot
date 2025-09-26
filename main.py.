@@ -1,0 +1,111 @@
+import os
+import logging
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
+import requests
+
+# Enable logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Get keys from environment
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+FOOTBALL_API_KEY = os.getenv("FOOTBALL_API_KEY")
+API_URL = "https://v3.football.api-sports.io/"
+
+headers = {"x-apisports-key": FOOTBALL_API_KEY}
+
+
+# ====== Command Handlers ======
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Welcome to Football Predictor Bot ⚽🔥\n\n"
+        "Use /help to see available commands."
+    )
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📌 Available Commands:\n"
+        "/ggtoday - GG/NG predictions for today\n"
+        "/over25 - Over 2.5 goals tips\n"
+        "/under25 - Under 2.5 goals tips\n"
+        "/tips - Mixed predictions\n"
+    )
+
+
+def fetch_today_matches():
+    try:
+        from datetime import date
+        today = date.today().strftime("%Y-%m-%d")
+        url = f"{API_URL}fixtures?date={today}&league=39&season=2023"
+        res = requests.get(url, headers=headers)
+        data = res.json()
+        return data.get("response", [])
+    except Exception as e:
+        logger.error(f"Error fetching matches: {e}")
+        return []
+
+
+async def ggtoday(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    matches = fetch_today_matches()
+    if not matches:
+        await update.message.reply_text("No matches found today.")
+        return
+    text = "⚽ GG/NG Predictions:\n"
+    for m in matches[:5]:  # show first 5 to keep it short
+        home = m["teams"]["home"]["name"]
+        away = m["teams"]["away"]["name"]
+        text += f"{home} vs {away} → GG ✅\n"
+    await update.message.reply_text(text)
+
+
+async def over25(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    matches = fetch_today_matches()
+    text = "⚽ Over 2.5 Predictions:\n"
+    for m in matches[:5]:
+        home = m["teams"]["home"]["name"]
+        away = m["teams"]["away"]["name"]
+        text += f"{home} vs {away} → Over 2.5 ✅\n"
+    await update.message.reply_text(text)
+
+
+async def under25(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    matches = fetch_today_matches()
+    text = "⚽ Under 2.5 Predictions:\n"
+    for m in matches[:5]:
+        home = m["teams"]["home"]["name"]
+        away = m["teams"]["away"]["name"]
+        text += f"{home} vs {away} → Under 2.5 ✅\n"
+    await update.message.reply_text(text)
+
+
+async def tips(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    matches = fetch_today_matches()
+    text = "🔥 Mixed Tips:\n"
+    for m in matches[:3]:
+        home = m["teams"]["home"]["name"]
+        away = m["teams"]["away"]["name"]
+        text += f"{home} vs {away} → GG + Over 2.5 ✅\n"
+    await update.message.reply_text(text)
+
+
+# ====== Main Entrypoint ======
+def main():
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("ggtoday", ggtoday))
+    application.add_handler(CommandHandler("over25", over25))
+    application.add_handler(CommandHandler("under25", under25))
+    application.add_handler(CommandHandler("tips", tips))
+
+    logger.info("Bot started...")
+    application.run_polling()
+
+
+if __name__ == "__main__":
+    main()
